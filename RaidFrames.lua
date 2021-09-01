@@ -324,10 +324,10 @@ local function GetOptions()
               step = 1,
               set = function(info, value)
                 AddOn.db.profile.height = value
-                for _, header in pairs(AddOn.headers) do
+                for groupType, header in pairs(AddOn.headers) do
                   for i = 1, #header do
                     local frame = header[i]
-                    AddOn.DefaultSetup(frame)
+                    AddOn.DefaultSetup(frame, groupType)
                   end
                 end
               end,
@@ -346,10 +346,10 @@ local function GetOptions()
               step = 1,
               set = function(info, value)
                 AddOn.db.profile.width = value
-                for _, header in pairs(AddOn.headers) do
+                for groupType, header in pairs(AddOn.headers) do
                   for i = 1, #header do
                     local frame = header[i]
-                    AddOn.DefaultSetup(frame)
+                    AddOn.DefaultSetup(frame, groupType)
                   end
                 end
               end,
@@ -1997,12 +1997,12 @@ local texCoords = {
 local NATIVE_UNIT_FRAME_HEIGHT = 36
 local NATIVE_UNIT_FRAME_WIDTH = 72
 
-function AddOn.DefaultSetup(frame)
+function AddOn.DefaultSetup(frame, groupType)
   AddOn.DefaultSetupOptions = {
     displayPowerBar = true,
-    height = math.floor(AddOn.db.profile.height / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5),
-    width = math.floor(AddOn.db.profile.width / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5),
-    displayBorder = false,
+    height = AddOn:GetHeight(groupType or GetNumGroupMembers()),
+    width = AddOn:GetWidth(groupType or GetNumGroupMembers()),
+    displayBorder = false
   }
   local options = AddOn.DefaultSetupOptions
   --options.width = frame:GetWidth()
@@ -2230,28 +2230,28 @@ function AddOn:CreateOrUpdateHeaders()
   end
 
   if AddOn.db.profile.displayPartyGroup then
-    -- Party (1 to 5 players)
-    local party = oUF:SpawnHeader("oUF_Party", nil, "custom [@raid6,exists] hide; show",
-      "showRaid", true,
-      "showParty", true,
-      "showPlayer", true,
-      "point", "LEFT",
-      "sortMethod", "NAME",
-      "groupBy", "ASSIGNEDROLE",
-      "groupingOrder", "TANK,HEALER,DAMAGER,NONE",
-    --"maxColumns", 5,
-    --"unitsPerColumn", 1,
-    --"columnAnchorPoint", "TOP",
-      "columnAnchorPoint", character == "Meivyn" and "TOP" or "LEFT",
-      "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', math.floor(AddOn.db.profile.width / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5), math.floor(AddOn.db.profile.height / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5))
+  -- Party (1 to 5 players)
+  local party = oUF:SpawnHeader("oUF_Party", nil, "custom [@raid6,exists] hide; show",
+    "showRaid", true,
+    "showParty", true,
+    "showPlayer", true,
+    "point", "LEFT",
+    "sortMethod", "NAME",
+    "groupBy", "ASSIGNEDROLE",
+    "groupingOrder", "TANK,HEALER,DAMAGER,NONE",
+  --"maxColumns", 5,
+  --"unitsPerColumn", 1,
+  --"columnAnchorPoint", "TOP",
+    "columnAnchorPoint", character == "Meivyn" and "TOP" or "LEFT",
+    "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', AddOn:GetWidth("party"), AddOn:GetHeight("party"))
     )
-    if isDamager then
-      party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 200)
-    else
-      --party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
-      party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY)
-    end
-    AddOn.headers.party = party
+  if isDamager then
+    party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 200)
+  else
+    --party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
+    party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY)
+  end
+  AddOn.headers.party = party
   end
   -- Raid 20 (6 to 20 players)
   local raid20 = oUF:SpawnHeader("oUF_Raid20", nil, "custom [@raid6,noexists][@raid21,exists] hide; show",
@@ -2264,7 +2264,7 @@ function AddOn:CreateOrUpdateHeaders()
     "maxColumns", 4,
     "unitsPerColumn", 5,
     "columnAnchorPoint", "LEFT",
-    "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', math.floor(AddOn.db.profile.width / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5), math.floor(AddOn.db.profile.height / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5))
+    "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', AddOn:GetWidth("raid20"), AddOn:GetHeight("raid20"))
   )
   if character == "Meivyn" then
     raid20:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 4, 516)
@@ -2284,7 +2284,7 @@ function AddOn:CreateOrUpdateHeaders()
     "maxColumns", 5,
     "unitsPerColumn", 5,
     "columnAnchorPoint", "LEFT",
-    "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', math.floor(AddOn.db.profile.width / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5), math.floor(AddOn.db.profile.height / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5))
+    "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', AddOn:GetWidth("raid25"), AddOn:GetHeight("raid25"))
   )
   if character == "Meivyn" then
   else
@@ -2304,7 +2304,7 @@ function AddOn:CreateOrUpdateHeaders()
     "maxColumns", 8,
     "unitsPerColumn", 5,
     "columnAnchorPoint", "TOP",
-    "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', math.floor(AddOn.db.profile.width / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5), math.floor(AddOn.db.profile.height / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5))
+    "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', AddOn:GetWidth("raid40"), AddOn:GetHeight("raid40"))
   )
   if character == "Meivyn" then
   else
@@ -2318,6 +2318,26 @@ oUF:RegisterStyle("RaidFrames", AddOn.ConstructFrames)
 oUF:Factory(function(self)
     AddOn:CreateOrUpdateHeaders()
 end)
+
+function AddOn:GetWidth(groupSizeOrType)
+  local width
+  if type(groupSizeOrType) == "number" then
+    width = math.floor(self.db.profile.width / ((groupSizeOrType <= 5 or groupSizeOrType > 20) and 5 or 4))
+  else
+    width = math.floor(self.db.profile.width / (groupSizeOrType == "raid20" and 4 or 5) + 0.5)
+  end
+  return width
+end
+
+function AddOn:GetHeight(groupSizeOrType)
+  local height
+  if type(groupSizeOrType) == "number" then
+    height = math.floor(self.db.profile.height / (groupSizeOrType > 25 and 8 or 5))
+  else
+    height = math.floor(self.db.profile.height / (groupSizeOrType == "raid40" and 8 or 5) + 0.5)
+  end
+  return height
+end
 
 --local resetHeader = self:SpawnHeader("RaidFrames", nil, "raid,party",
 --  "showRaid", true,
