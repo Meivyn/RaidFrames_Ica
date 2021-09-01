@@ -2229,7 +2229,7 @@ function AddOn:CreateOrUpdateHeaders()
     self.headers = {}
   end
 
-  if AddOn.config.profile.displayPartyGroup then
+  if AddOn.db.profile.displayPartyGroup then
     -- Party (1 to 5 players)
     local party = oUF:SpawnHeader("oUF_Party", nil, "custom [@raid6,exists] hide; show",
       "showRaid", true,
