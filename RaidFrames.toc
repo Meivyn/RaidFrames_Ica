@@ -1,0 +1,13 @@
+## Interface: 90100
+## Title: |cff33ff99Raid Frames|r
+## Author: Meivyn
+## SavedVariables: RaidFramesDB
+
+Libs\oUF\oUF.xml
+Libs\Ace3\LibStub\LibStub.lua
+Libs\Ace3\AceAddon-3.0\AceAddon-3.0.xml
+Libs\Ace3\AceDB-3.0\AceDB-3.0.xml
+Libs\Ace3\AceDBOptions-3.0\AceDBOptions-3.0.xml
+Libs\Ace3\AceConfig-3.0\AceConfig-3.0.xml
+
+RaidFrames.lua
