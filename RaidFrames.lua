@@ -402,15 +402,15 @@ local function GetOptions()
               end
             },
             lb29 = {
-              name = "", order = 42, type = "description",
+              name = "", order = 44, type = "description",
             },
             lb30 = {
-              name = "", order = 43, type = "description",
+              name = "", order = 45, type = "description",
             },
             displayPartyGroup = {
               name = "Afficher en groupe",
               type = "toggle",
-              order= 44,
+              order= 46,
               set = function(info, value)
                 AddOn.db.profile.displayPartyGroup = value
               end,
