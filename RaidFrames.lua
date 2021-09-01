@@ -41,6 +41,7 @@ AddOn.defaults = {
     offsetY = 0,
     height = 180,
     width = 360,
+    displayPartyGroup = false,
 
     colorHealthWithExtendedColors = true,
     smoothUpdates = true,
@@ -398,6 +399,23 @@ local function GetOptions()
               end,
               get = function(info)
                 return AddOn.db.profile.offsetY
+              end
+            },
+            lb29 = {
+              name = "", order = 42, type = "description",
+            },
+            lb30 = {
+              name = "", order = 43, type = "description",
+            },
+            displayPartyGroup = {
+              name = "Afficher en groupe",
+              type = "toggle",
+              order= 44,
+              set = function(info, value)
+                AddOn.db.profile.displayPartyGroup = value
+              end,
+              get = function(info)
+                return AddOn.db.profile.displayPartyGroup
               end
             }
           }
@@ -2211,28 +2229,30 @@ function AddOn:CreateOrUpdateHeaders()
     self.headers = {}
   end
 
-  -- Party (1 to 5 players)
-  local party = oUF:SpawnHeader("oUF_Party", nil, "custom [@raid6,exists] hide; show",
-    "showRaid", true,
-    "showParty", true,
-    "showPlayer", true,
-    "point", "LEFT",
-    "sortMethod", "NAME",
-    "groupBy", "ASSIGNEDROLE",
-    "groupingOrder", "TANK,HEALER,DAMAGER,NONE",
-  --"maxColumns", 5,
-  --"unitsPerColumn", 1,
-  --"columnAnchorPoint", "TOP",
-    "columnAnchorPoint", character == "Meivyn" and "TOP" or "LEFT",
-    "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', math.floor(AddOn.db.profile.width / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5), math.floor(AddOn.db.profile.height / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5))
-  )
-  if isDamager then
-    party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 200)
-  else
-    --party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
-    party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY)
+  if AddOn.config.profile.displayPartyGroup then
+    -- Party (1 to 5 players)
+    local party = oUF:SpawnHeader("oUF_Party", nil, "custom [@raid6,exists] hide; show",
+      "showRaid", true,
+      "showParty", true,
+      "showPlayer", true,
+      "point", "LEFT",
+      "sortMethod", "NAME",
+      "groupBy", "ASSIGNEDROLE",
+      "groupingOrder", "TANK,HEALER,DAMAGER,NONE",
+    --"maxColumns", 5,
+    --"unitsPerColumn", 1,
+    --"columnAnchorPoint", "TOP",
+      "columnAnchorPoint", character == "Meivyn" and "TOP" or "LEFT",
+      "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', math.floor(AddOn.db.profile.width / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5), math.floor(AddOn.db.profile.height / ((GetNumGroupMembers() < 6 or GetNumGroupMembers() > 20) and 5 or 4) + 0.5))
+    )
+    if isDamager then
+      party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 200)
+    else
+      --party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
+      party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY)
+    end
+    AddOn.headers.party = party
   end
-  AddOn.headers.party = party
   -- Raid 20 (6 to 20 players)
   local raid20 = oUF:SpawnHeader("oUF_Raid20", nil, "custom [@raid6,noexists][@raid21,exists] hide; show",
     "showRaid", true,
