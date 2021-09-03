@@ -2,9 +2,7 @@ local ADDON_NAME, ns = ...
 local oUF = ns.oUF
 
 local AddOn = LibStub("AceAddon-3.0"):NewAddon(ADDON_NAME)
---AddOn.L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME)
 AddOn.defaults = {
-  global = {},
   profile = {
     useClassColors = true,
     displaySelectionHighlight = true,
@@ -41,26 +39,92 @@ AddOn.defaults = {
     offsetY = 0,
     height = 180,
     width = 360,
-    displayPartyGroup = false,
 
     colorHealthWithExtendedColors = true,
     smoothUpdates = true,
+    hideTooltipInCombat = true,
+    showOverAbsorb = true,
+    showGroupNumber = true,
+    alwaysShowForbearance = true,
+    showHealerManaOnly = true,
+    displayPartyGroup = true,
+
     --smoothHealthUpdates
     --displayNameWhenSelected = true,
     --displayNameByPlayerNameRules = true,
     --healthBarColorOverride = CreateColor(0, 1, 0),
   }
 }
+AddOn.headers = {}
+AddOn.headerstoload = { "party", "raid20", "raid25", "raid40" }
 
 ns[1] = AddOn
---ns[2] = AddOn.L
 ns[2] = AddOn.defaults.profile
-ns[3] = AddOn.defaults.global
 
 local AceConfigDialog = LibStub("AceConfigDialog-3.0")
 local AceConfigRegistry = LibStub("AceConfigRegistry-3.0")
+local AceConsole = LibStub("AceConsole-3.0")
 
 RaidFrames = ns
+
+local function debug(...)
+  if not ... then return end
+  if type(...) == "table" then
+    AceConsole.Print(ADDON_NAME)
+    DevTools_Dump(...)
+  else
+    AceConsole.Print(ADDON_NAME, ...)
+  end
+end
+
+local function NoCombatFunction(frame, func, args, debugMode)
+  if not AddOn.noCombatFrame then
+    AddOn.noCombatFrame = CreateFrame("Frame")
+  end
+  if not InCombatLockdown() then
+    if debugMode then
+      debug("Not in combat.")
+    end
+    AddOn.noCombatFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    AddOn.noCombatFrame:SetScript("OnEvent", nil)
+    func(frame, unpack(args))
+  else
+    if debugMode then
+      debug("In combat.")
+    end
+    AddOn.noCombatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    AddOn.noCombatFrame:SetScript("OnEvent", function(self, event)
+      if debugMode then
+        debug("Leaving combat.")
+      end
+      self:UnregisterEvent(event)
+      self:SetScript("OnEvent", nil)
+      func(frame, unpack(args))
+    end)
+  end
+end
+
+local function GetUnitFrameWidth(groupSizeOrType)
+  local width
+  if type(groupSizeOrType) == "number" then
+    width = math.floor(AddOn.db.profile.width / ((groupSizeOrType <= 5 or groupSizeOrType > 20) and 5 or 4) + 0.5)
+  else
+    width = math.floor(AddOn.db.profile.width / (groupSizeOrType == "raid20" and 4 or 5) + 0.5)
+  end
+  --debug(width, groupSizeOrType)
+  return width
+end
+
+local function GetUnitFrameHeight(groupSizeOrType)
+  local height
+  if type(groupSizeOrType) == "number" then
+    height = math.floor(AddOn.db.profile.height / (groupSizeOrType > 25 and 8 or 5) + 0.5)
+  else
+    height = math.floor(AddOn.db.profile.height / (groupSizeOrType == "raid40" and 8 or 5) + 0.5)
+  end
+  --debug(height, groupSizeOrType)
+  return height
+end
 
 local function GetOptions()
   if not AddOn.options then
@@ -71,6 +135,7 @@ local function GetOptions()
         general = {
           name = COMPACT_UNIT_FRAME_PROFILE_SUBTYPE_ALL,
           type = "group",
+          order = 1,
           args = {
             keepGroupsTogether = {
               name = COMPACT_UNIT_FRAME_PROFILE_KEEPGROUPSTOGETHER,
@@ -375,7 +440,7 @@ local function GetOptions()
               set = function(info, value)
                 AddOn.db.profile.offsetX = value
                 for _, header in pairs(AddOn.headers) do
-                  header:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY)
+                  NoCombatFunction(header, header.SetPoint, { "TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY }, true)
                 end
               end,
               get = function(info)
@@ -394,32 +459,110 @@ local function GetOptions()
               set = function(info, value)
                 AddOn.db.profile.offsetY = value
                 for _, header in pairs(AddOn.headers) do
-                  header:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY)
+                  NoCombatFunction(header, header.SetPoint, { "TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY }, true)
                 end
               end,
               get = function(info)
                 return AddOn.db.profile.offsetY
               end
+            }
+          }
+        },
+        misc = {
+          name = "Autres options",
+          type = "group",
+          order = 2,
+          args = {
+            smoothUpdates = {
+              name = "Barres fluides",
+              type = "toggle",
+              order = 1,
+              set = function(info, value)
+                AddOn.db.profile.smoothUpdates = value
+              end,
+              get = function(info)
+                return AddOn.db.profile.smoothUpdates
+              end
             },
-            lb29 = {
-              name = "", order = 44, type = "description",
+            hideTooltipInCombat = {
+              name = "Masquer l'infobulle en combat",
+              type = "toggle",
+              order = 2,
+              set = function(info, value)
+                AddOn.db.profile.hideTooltipInCombat = value
+              end,
+              get = function(info)
+                return AddOn.db.profile.hideTooltipInCombat
+              end
             },
-            lb30 = {
-              name = "", order = 45, type = "description",
+            showOverAbsorb = {
+              name = "Absorption en excès",
+              type = "toggle",
+              order = 3,
+              set = function(info, value)
+                AddOn.db.profile.showOverAbsorb = value
+              end,
+              get = function(info)
+                return AddOn.db.profile.showOverAbsorb
+              end
+            },
+            showGroupNumber = {
+              name = "Numéros de groupe",
+              type = "toggle",
+              order = 4,
+              set = function(info, value)
+                AddOn.db.profile.showGroupNumber = value
+              end,
+              get = function(info)
+                return AddOn.db.profile.showGroupNumber
+              end
+            },
+            alwaysShowForbearance = {
+              name = "Toujours afficher Longaminité",
+              type = "toggle",
+              order = 5,
+              set = function(info, value)
+                AddOn.db.profile.alwaysShowForbearance = value
+              end,
+              get = function(info)
+                return AddOn.db.profile.alwaysShowForbearance
+              end
+            },
+            showHealerManaOnly = {
+              name = "Barres d'énergie des soigneurs uniquement",
+              type = "toggle",
+              order = 6,
+              set = function(info, value)
+                AddOn.db.profile.showHealerManaOnly = value
+              end,
+              get = function(info)
+                return AddOn.db.profile.showHealerManaOnly
+              end
             },
             displayPartyGroup = {
               name = "Afficher en groupe",
               type = "toggle",
-              order= 46,
+              order= 7,
               set = function(info, value)
                 AddOn.db.profile.displayPartyGroup = value
               end,
               get = function(info)
                 return AddOn.db.profile.displayPartyGroup
               end
+            },
+            colorHealthWithExtendedColors = {
+              name = "Sélection de couleur",
+              type = "toggle",
+              order= 8,
+              set = function(info, value)
+                AddOn.db.profile.colorHealthWithExtendedColors = value
+              end,
+              get = function(info)
+                return AddOn.db.profile.colorHealthWithExtendedColors
+              end
             }
           }
-        },
+        }
       },
       plugins = {
         profiles = {
@@ -432,14 +575,168 @@ local function GetOptions()
   return AddOn.options
 end
 
+function AddOn:Setup()
+  oUF:RegisterStyle("RaidFrames", AddOn.Style)
+  oUF:SetActiveStyle("RaidFrames")
+  AddOn:LoadUnits()
+end
+
+function AddOn:Style(unit)
+  AddOn:ConstructUnitFrame(self, unit)
+end
+
+function AddOn:LoadUnits()
+  for i = 1, #AddOn.headerstoload do
+    self:CreateAndUpdateHeaderGroup(self.headerstoload[i])
+  end
+end
+
+function AddOn:CreateAndUpdateHeaderGroup(group)
+  -- TODO: Find a way to have separated columns for each group.
+  --[[
+  List of the various configuration attributes
+  ======================================================
+  showRaid = [BOOLEAN] -- true if the header should be shown while in a raid
+  showParty = [BOOLEAN] -- true if the header should be shown while in a party and not in a raid
+  showPlayer = [BOOLEAN] -- true if the header should show the player when not in a raid
+  showSolo = [BOOLEAN] -- true if the header should be shown while not in a group (implies showPlayer)
+  nameList = [STRING] -- a comma separated list of player names (not used if 'groupFilter' is set)
+  groupFilter = [1-8, STRING] -- a comma seperated list of raid group numbers and/or uppercase class names and/or uppercase roles
+  roleFilter = [STRING] -- a comma seperated list of MT/MA/Tank/Healer/DPS role strings
+  strictFiltering = [BOOLEAN]
+  -- if true, then
+  ---- if only groupFilter is specified then characters must match both a group and a class from the groupFilter list
+  ---- if only roleFilter is specified then characters must match at least one of the specified roles
+  ---- if both groupFilter and roleFilters are specified then characters must match a group and a class from the groupFilter list and a role from the roleFilter list
+  point = [STRING] -- a valid XML anchoring point (Default: "TOP")
+  xOffset = [NUMBER] -- the x-Offset to use when anchoring the unit buttons (Default: 0)
+  yOffset = [NUMBER] -- the y-Offset to use when anchoring the unit buttons (Default: 0)
+  sortMethod = ["INDEX", "NAME", "NAMELIST"] -- defines how the group is sorted (Default: "INDEX")
+  sortDir = ["ASC", "DESC"] -- defines the sort order (Default: "ASC")
+  template = [STRING] -- the XML template to use for the unit buttons
+  templateType = [STRING] - specifies the frame type of the managed subframes (Default: "Button")
+  groupBy = [nil, "GROUP", "CLASS", "ROLE", "ASSIGNEDROLE"] - specifies a "grouping" type to apply before regular sorting (Default: nil)
+  groupingOrder = [STRING] - specifies the order of the groupings (ie. "1,2,3,4,5,6,7,8")
+  maxColumns = [NUMBER] - maximum number of columns the header will create (Default: 1)
+  unitsPerColumn = [NUMBER or nil] - maximum units that will be displayed in a singe column, nil is infinite (Default: nil)
+  startingIndex = [NUMBER] - the index in the final sorted unit list at which to start displaying units (Default: 1)
+  columnSpacing = [NUMBER] - the amount of space between the rows/columns (Default: 0)
+  columnAnchorPoint = [STRING] - the anchor point of each new column (ie. use LEFT for the columns to grow to the right)
+  --]]
+
+  --"roleFilter", "MAINTANK,MAINASSIS T,TANK,HEALER,DAMAGER,NONE",
+  --"groupFilter", "WARRIOR,DEATHKNIGHT,PALADIN,MONK,PRIEST,SHAMAN,DRUID,ROGUE,MAGE,WARLOCK,HUNTER,DEMONHUNTER",
+
+  --local isDamager = ElvDB and ElvDB.profileKeys and ElvDB.profileKeys[ElvUI[1].mynameRealm] == "Meivyn"
+
+  local header = AddOn.headers[group]
+
+  if not header then
+    --local resetHeader = self:SpawnHeader("RaidFrames", nil, "raid,party",
+    --  "showRaid", true,
+    --  "showParty", true,
+    --  "showPlayer", true,
+    --  "showSolo", true,
+    --  "nameList", nil,
+    --  "groupFilter", nil,
+    --  "roleFilter", nil,
+    --  "strictFiltering", nil,
+    --  "point", "LEFT",
+    --  "xOffset", nil,
+    --  "yOffset", nil,
+    --  "sortMethod", "NAME",
+    --  "sortDir", nil,
+    --  "groupBy", nil,
+    --  "groupingOrder", nil,
+    --  "maxColumns", nil,
+    --  "unitsPerColumn", nil,
+    --  "startingIndex", nil,
+    --  "columnSpacing", nil,
+    --  "columnAnchorPoint", nil,
+    --  "oUF-initialConfigFunction", ([[
+    --      --self:SetWidth(271) -- 81.2
+    --      --self:SetHeight(51) -- 50.6
+    --      self:SetWidth(81) -- 81.2
+    --      self:SetHeight(51) -- 50.6
+    --    ]])
+    --)
+    --header:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
+
+    if group == "party" and not self.db.profile.displayPartyGroup then
+      return
+    end
+
+    header = oUF:SpawnHeader("oUF_" .. gsub(group, "(.)", strupper, 1), nil, nil,
+    'oUF-initialConfigFunction', format('self:SetWidth(%d); self:SetHeight(%d);', GetUnitFrameWidth(group), GetUnitFrameHeight(group)),
+    'showParty', true, 'showRaid', group ~= "party", 'showSolo', true)
+
+    self.headers[group] = header
+  end
+
+  header:SetAttribute("sortMethod", "NAME")
+  header:SetAttribute("groupBy", "ASSIGNEDROLE")
+  header:SetAttribute("groupingOrder", "TANK,DAMAGER,HEALER,NONE")
+  header:SetAttribute("columnAnchorPoint", "LEFT")
+
+  local visibility, maxColumns, unitsPerColumn
+  if group == "party" then
+    visibility = "[@raid6,exists][nogroup] hide; show"
+    header:SetAttribute("point", "LEFT")
+    header:SetAttribute("groupingOrder", "TANK,HEALER,DAMAGER,NONE")
+    header:SetAttribute("columnAnchorPoint", "LEFT")
+    header:SetAttribute("point", "LEFT")
+  elseif group == "raid20" then
+    visibility = "[@raid6,noexists][@raid21,exists] hide; show"
+    maxColumns = 4
+    unitsPerColumn = 5
+    header:SetAttribute("columnAnchorPoint", "LEFT")
+  elseif group == "raid25" then
+    visibility = "[@raid21,noexists][@raid26,exists] hide; show"
+    maxColumns = 5
+    unitsPerColumn = 5
+    header:SetAttribute("columnAnchorPoint", "LEFT")
+  elseif group == "raid40" then
+    visibility = "[@raid26,noexists] hide; show"
+    maxColumns = 8
+    unitsPerColumn = 5
+    header:SetAttribute("point", "LEFT")
+    header:SetAttribute("columnAnchorPoint", "TOP")
+  end
+
+  --if enable then
+    if not header.isForced then
+      header:SetAttribute("maxColumns", maxColumns)
+      header:SetAttribute("unitsPerColumn", unitsPerColumn)
+      header:SetAttribute("showPlayer", true)
+      RegisterStateDriver(header, "visibility", visibility)
+    end
+  --else
+  --  UnregisterStateDriver(header, "visibility")
+  --  header:Hide()
+  --end
+
+  header:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY)
+end
+
+function AddOn:Refresh()
+  StaticPopupDialogs["RAIDFRAMES_RELOADUI"] = {
+    text = "Vous devez recharger l'interface pour appliquer ces changements. Voulez-vous recharger maintenant ?",
+    button1 = "Oui",
+    button2 = "Non",
+    OnAccept = ReloadUI,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,  -- avoid some UI taint, see http://www.wowace.com/announcements/how-to-avoid-some-ui-taint/
+  }
+  StaticPopup_Show("RAIDFRAMES_RELOADUI")
+end
+
 function AddOn:OnInitialize()
   self.db = LibStub("AceDB-3.0"):New("RaidFramesDB", self.defaults, true)
-  --self.db.RegisterCallback(self, "OnProfileChanged", "Refresh")
-  --self.db.RegisterCallback(self, "OnProfileCopied", "Refresh")
-  --self.db.RegisterCallback(self, "OnProfileReset", "Refresh")
-
-  self.global = self.db.global
-  self.profile = self.db.profile
+  self.db.RegisterCallback(self, "OnProfileChanged", "Refresh")
+  self.db.RegisterCallback(self, "OnProfileCopied", "Refresh")
+  self.db.RegisterCallback(self, "OnProfileReset", "Refresh")
 
   AceConfigRegistry:RegisterOptionsTable(ADDON_NAME, GetOptions)
   self.config = AceConfigDialog:AddToBlizOptions(ADDON_NAME)
@@ -447,6 +744,76 @@ function AddOn:OnInitialize()
   --self.config:GetRegions():SetPoint("TOPLEFT", 16, -16) -- reposition title
 
   self.config.profiles = LibStub("AceDBOptions-3.0"):GetOptionsTable(self.db)
+
+  oUF:Factory(self.Setup)
+
+  local ABSORB_GLOW_ALPHA = 0.6
+  local ABSORB_GLOW_OFFSET = -5
+
+  --hooksecurefunc("UnitFrame_Update",
+  --  function(frame)
+  --    local absorbBar = frame.totalAbsorbBar
+  --    if not absorbBar or absorbBar:IsForbidden() then return end
+  --
+  --    local absorbOverlay = frame.totalAbsorbBarOverlay
+  --    if not absorbOverlay or absorbOverlay:IsForbidden() then return end
+  --
+  --    local healthBar = frame.healthbar
+  --    if not healthBar or healthBar:IsForbidden() then return end
+  --
+  --    absorbOverlay:SetParent(healthBar)
+  --    absorbOverlay:ClearAllPoints()		--we'll be attaching the overlay on heal prediction update.
+  --
+  --    local absorbGlow = frame.overAbsorbGlow
+  --    if absorbGlow and not absorbGlow:IsForbidden() then
+  --      absorbGlow:ClearAllPoints()
+  --      absorbGlow:SetPoint("TOPLEFT", absorbOverlay, "TOPLEFT", ABSORB_GLOW_OFFSET, 0)
+  --      absorbGlow:SetPoint("BOTTOMLEFT", absorbOverlay, "BOTTOMLEFT", ABSORB_GLOW_OFFSET, 0)
+  --      absorbGlow:SetAlpha(ABSORB_GLOW_ALPHA)
+  --    end
+  --  end
+  --)
+  --
+  --hooksecurefunc("UnitFrameHealPredictionBars_Update",
+  --  function(frame)
+  --    local absorbBar = frame.totalAbsorbBar
+  --    if not absorbBar or absorbBar:IsForbidden() then return end
+  --
+  --    local absorbOverlay = frame.totalAbsorbBarOverlay
+  --    if not absorbOverlay or absorbOverlay:IsForbidden() then return end
+  --
+  --    local healthBar = frame.healthbar
+  --    if not healthBar or healthBar:IsForbidden() then return end
+  --
+  --    local _, maxHealth = healthBar:GetMinMaxValues()
+  --    if maxHealth <= 0 then return end
+  --
+  --    local totalAbsorb = UnitGetTotalAbsorbs(frame.unit) or 0
+  --    if totalAbsorb > maxHealth then
+  --      totalAbsorb = maxHealth
+  --    end
+  --
+  --    if totalAbsorb > 0 then	--show overlay when there's a positive absorb amount
+  --      if absorbBar:IsShown() then		--If absorb bar is shown, attach absorb overlay to it; otherwise, attach to health bar.
+  --        absorbOverlay:SetPoint("TOPRIGHT", absorbBar, "TOPRIGHT", 0, 0)
+  --        absorbOverlay:SetPoint("BOTTOMRIGHT", absorbBar, "BOTTOMRIGHT", 0, 0)
+  --      else
+  --        absorbOverlay:SetPoint("TOPRIGHT", healthBar, "TOPRIGHT", 0, 0)
+  --        absorbOverlay:SetPoint("BOTTOMRIGHT", healthBar, "BOTTOMRIGHT", 0, 0)
+  --      end
+  --
+  --      local totalWidth, totalHeight = healthBar:GetSize()
+  --      local barSize = totalAbsorb / maxHealth * totalWidth
+  --
+  --      absorbOverlay:SetWidth(barSize)
+  --      absorbOverlay:SetTexCoord(0, barSize / absorbOverlay.tileSize, 0, totalHeight / absorbOverlay.tileSize);
+  --      absorbOverlay:Show()
+  --
+  --      --frame.overAbsorbGlow:Show()	--uncomment this if you want to ALWAYS show the glow to the left of the shield overlay
+  --    end
+  --
+  --  end
+  --)
 end
 
 function AddOn:OnEnable()
@@ -457,122 +824,92 @@ function AddOn:OnDisable()
 
 end
 
-local function debug(...)
-  _G[ADDON_NAME] = _G[ADDON_NAME] or AddOn
-  if not ... then return end
-  if type(...) == "table" then
-    print("|cff33ff99" .. ADDON_NAME .. ":|r")
-    DevTools_Dump(...)
-  else
-    print("|cff33ff99" .. ADDON_NAME .. ":|r", ...)
-  end
-end
-
 -- Widget Handlers
 local OPTION_TABLE_NONE = {}
 
-local function RunProtectedFunction(frame, func)
-  local f = CreateFrame("Frame")
-  if not InCombatLockdown() then
-    debug("Not in combat.")
-    f:UnregisterEvent("PLAYER_REGEN_ENABLED")
-    f:SetScript("OnEvent", nil)
-    func(frame)
-  else
-    debug("In combat.")
-    f:RegisterEvent("PLAYER_REGEN_ENABLED")
-    f:SetScript("OnEvent", function(_, event)
-      f:UnregisterEvent(event)
-      f:SetScript("OnEvent", nil)
-      func(frame)
-      debug("Function run")
-    end)
-  end
-end
-
-function AddOn:ConstructFrames()
-  self:SetScript("OnEnter", function()
+function AddOn:ConstructUnitFrame(frame)
+  frame:SetScript("OnEnter", function(self)
     UnitFrame_OnEnter(self)
     if InCombatLockdown() then
       GameTooltip:Hide()
     end
     self.mouseIsOver = true
   end)
-  self:SetScript("OnLeave", function()
+  frame:SetScript("OnLeave", function(self)
     UnitFrame_OnLeave(self)
     self.mouseIsOver = false
   end)
 
-  local background = self:CreateTexture("$parentBackground", "BACKGROUND")
+  local background = frame:CreateTexture("$parentBackground", "BACKGROUND")
   background:SetAllPoints()
   background:SetIgnoreParentAlpha(true)
 
-  local myHealPrediction = self:CreateTexture("$parentMyHealPrediction", "BORDER", nil, 5)
-  local otherHealPrediction = self:CreateTexture("$parentOtherHealPrediction", "BORDER", nil, 5)
-  local totalAbsorb = self:CreateTexture("$parentTotalAbsorb", "BORDER", nil, 5)
+  local myHealPrediction = frame:CreateTexture("$parentMyHealPrediction", "BORDER", nil, 5)
+  local otherHealPrediction = frame:CreateTexture("$parentOtherHealPrediction", "BORDER", nil, 5)
+  local totalAbsorb = frame:CreateTexture("$parentTotalAbsorb", "BORDER", nil, 5)
 
-  local totalAbsorbOverlay = self:CreateTexture("$parentTotalAbsorbOverlay", "BORDER", nil, 6)
+  local totalAbsorbOverlay = frame:CreateTexture("$parentTotalAbsorbOverlay", "BORDER", nil, 6)
 
   -- TODO: Need to add ContainerBorderFrame.
-  local horizDivider = self:CreateTexture("$parentHorizDivider", "BORDER")
+  local horizDivider = frame:CreateTexture("$parentHorizDivider", "BORDER")
   horizDivider:SetHorizTile(true)
   horizDivider:SetIgnoreParentAlpha(true)
-  local horizTopBorder = self:CreateTexture("$parentHorizTopBorder", "BORDER")
+  local horizTopBorder = frame:CreateTexture("$parentHorizTopBorder", "BORDER")
   horizTopBorder:SetHorizTile(true)
   horizTopBorder:SetIgnoreParentAlpha(true)
-  local horizBottomBorder = self:CreateTexture("$parentHorizBottomBorder", "BORDER")
+  local horizBottomBorder = frame:CreateTexture("$parentHorizBottomBorder", "BORDER")
   horizBottomBorder:SetHorizTile(true)
   horizBottomBorder:SetIgnoreParentAlpha(true)
-  local vertLeftBorder = self:CreateTexture("$parentVertLeftBorder", "BORDER")
+  local vertLeftBorder = frame:CreateTexture("$parentVertLeftBorder", "BORDER")
   vertLeftBorder:SetVertTile(true)
   vertLeftBorder:SetIgnoreParentAlpha(true)
-  local vertRightBorder = self:CreateTexture("$parentVertRightBorder", "BORDER")
+  local vertRightBorder = frame:CreateTexture("$parentVertRightBorder", "BORDER")
   vertRightBorder:SetVertTile(true)
   vertRightBorder:SetIgnoreParentAlpha(true)
 
-  local name = self:CreateFontString("$parentName", "ARTWORK", "GameFontHighlightSmall")
+  local name = frame:CreateFontString("$parentName", "ARTWORK", "GameFontHighlightSmall")
   name:SetWordWrap(false)
-  local statusText = self:CreateFontString("$parentStatusText", "ARTWORK", "GameFontDisable")
-  local roleIcon = self:CreateTexture("$parentRoleIcon", "ARTWORK")
+  local statusText = frame:CreateFontString("$parentStatusText", "ARTWORK", "GameFontDisable")
+  local roleIcon = frame:CreateTexture("$parentRoleIcon", "ARTWORK")
   roleIcon:Hide()
-  local aggroHighlight = self:CreateTexture("$parentAggroHighlight", "ARTWORK")
+  local aggroHighlight = frame:CreateTexture("$parentAggroHighlight", "ARTWORK")
 
-  local myHealAbsorb = self:CreateTexture("$parentMyHealAbsorb", "ARTWORK", nil, 1)
-  local myHealAbsorbLeftShadow = self:CreateTexture("$parentMyHealAbsorbLeftShadow", "ARTWORK", nil, 1)
+  local myHealAbsorb = frame:CreateTexture("$parentMyHealAbsorb", "ARTWORK", nil, 1)
+  local myHealAbsorbLeftShadow = frame:CreateTexture("$parentMyHealAbsorbLeftShadow", "ARTWORK", nil, 1)
   myHealAbsorbLeftShadow:SetTexture("Interface\\RaidFrame\\Absorb-Edge")
-  local myHealAbsorbRightShadow = self:CreateTexture("$parentMyHealAbsorbRightShadow", "ARTWORK", nil, 1)
+  local myHealAbsorbRightShadow = frame:CreateTexture("$parentMyHealAbsorbRightShadow", "ARTWORK", nil, 1)
   myHealAbsorbRightShadow:SetTexture("Interface\\RaidFrame\\Absorb-Edge")
   myHealAbsorbRightShadow:SetTexCoord(1, 0, 0, 1)
 
-  local overAbsorbGlow = self:CreateTexture("$parentOverAbsorbGlow", "ARTWORK", nil, 2)
-  local overHealAbsorbGlow = self:CreateTexture("$parentOverHealAbsorbGlow", "ARTWORK", nil, 2)
+  local overAbsorbGlow = frame:CreateTexture("$parentOverAbsorbGlow", "ARTWORK", nil, 2)
+  local overHealAbsorbGlow = frame:CreateTexture("$parentOverHealAbsorbGlow", "ARTWORK", nil, 2)
 
-  local selectionHighlight = self:CreateTexture("$parentSelectionHighlight", "OVERLAY")
+  local selectionHighlight = frame:CreateTexture("$parentSelectionHighlight", "OVERLAY")
   selectionHighlight:SetIgnoreParentAlpha(true)
-  local readyCheckIcon = self:CreateTexture("$parentReadyCheckIcon", "OVERLAY")
+  local readyCheckIcon = frame:CreateTexture("$parentReadyCheckIcon", "OVERLAY")
   readyCheckIcon:SetIgnoreParentAlpha(true)
 
-  local healthBar = CreateFrame("StatusBar", "$parentHealthBar", self)
-  healthBar:SetFrameLevel(self:GetFrameLevel())
+  local healthBar = CreateFrame("StatusBar", "$parentHealthBar", frame)
+  healthBar:SetFrameLevel(frame:GetFrameLevel())
   Mixin(healthBar, SmoothStatusBarMixin)
   local healthBarBackground = healthBar:CreateTexture("$parentBackground", "BACKGROUND", nil, 2)
   healthBarBackground:SetAllPoints()
-  local powerBar = CreateFrame("StatusBar", "$parentPowerBar", self)
-  powerBar:SetFrameLevel(self:GetFrameLevel())
+  local powerBar = CreateFrame("StatusBar", "$parentPowerBar", frame)
+  powerBar:SetFrameLevel(frame:GetFrameLevel())
   Mixin(powerBar, SmoothStatusBarMixin)
   local powerBarBackground = powerBar:CreateTexture("$parentBackground", "BACKGROUND", nil, 2)
   powerBarBackground:SetAllPoints()
 
   for i = 1, 3 do
-    local buffFrame = CreateFrame("Button", "$parentBuff" .. i, self, "CompactBuffTemplate")
-    local debuffFrame = CreateFrame("Button", "$parentDebuff" .. i, self, "CompactDebuffTemplate")
-    local dispelDebuffFrame = CreateFrame("Button", "$parentDispelDebuff" .. i, self, "CompactDispelDebuffTemplate")
-    self.buffFrames[i] = buffFrame
-    self.debuffFrames[i] = debuffFrame
-    self.dispelDebuffFrames[i] = dispelDebuffFrame
+    local buffFrame = CreateFrame("Button", "$parentBuff" .. i, frame, "CompactBuffTemplate")
+    local debuffFrame = CreateFrame("Button", "$parentDebuff" .. i, frame, "CompactDebuffTemplate")
+    local dispelDebuffFrame = CreateFrame("Button", "$parentDispelDebuff" .. i, frame, "CompactDispelDebuffTemplate")
+    frame.buffFrames[i] = buffFrame
+    frame.debuffFrames[i] = debuffFrame
+    frame.dispelDebuffFrames[i] = dispelDebuffFrame
   end
 
-  local centerStatusIcon = CreateFrame("Button", "$parentCenterStatusIcon", self)
+  local centerStatusIcon = CreateFrame("Button", "$parentCenterStatusIcon", frame)
   centerStatusIcon:RegisterForClicks("RightButtonUp") -- TODO: "LeftButtonDown" triggers TargetUnit(), a protected function, so take it appart for now.
   centerStatusIcon:SetScript("OnClick", function(self, button)
     self:GetParent():GetScript("OnClick")(self:GetParent(), button)
@@ -583,16 +920,14 @@ function AddOn:ConstructFrames()
       GameTooltip:SetText(self.tooltip, nil, nil, nil, nil, true)
       GameTooltip:Show()
     else
-      local onEnter =  self:GetParent():GetScript("OnEnter")
-      onEnter(self:GetParent(), motion) -- TODO: This throws "Cannot call restricted closure from insecure code".
+      self:GetParent():GetScript("OnEnter")(self:GetParent(), motion) -- TODO: This throws "Cannot call restricted closure from insecure code".
     end
   end)
   centerStatusIcon:SetScript("OnLeave", function(self, motion)
     if self.tooltip then
       GameTooltip:Hide()
     else
-      local onLeave =  self:GetParent():GetScript("OnLeave")
-      onLeave(self:GetParent(), motion) -- TODO: This throws "Cannot call restricted closure from insecure code".
+      self:GetParent():GetScript("OnLeave")(self:GetParent(), motion) -- TODO: This throws "Cannot call restricted closure from insecure code".
     end
   end)
   local centerStatusIconTexture = centerStatusIcon:CreateTexture(nil, "ARTWORK")
@@ -600,81 +935,81 @@ function AddOn:ConstructFrames()
   local centerStatusIconBorder = centerStatusIcon:CreateTexture(nil, "BORDER")
   centerStatusIconBorder:SetAllPoints()
 
-  local dropDown = CreateFrame("Frame", "$parentDropDown", self, "UIDropDownMenuTemplate")
+  local dropDown = CreateFrame("Frame", "$parentDropDown", frame, "UIDropDownMenuTemplate")
   dropDown:SetSize(10, 10)
   dropDown:SetPoint("TOP", 10, -60)
   dropDown:Hide()
 
-  self.background = background
-  self.myHealPrediction = myHealPrediction
-  self.otherHealPrediction = otherHealPrediction
-  self.totalAbsorb = totalAbsorb
-  self.totalAbsorbOverlay = totalAbsorbOverlay
-  self.horizDivider = horizDivider
-  self.horizTopBorder = horizTopBorder
-  self.horizBottomBorder = horizBottomBorder
-  self.vertLeftBorder = vertLeftBorder
-  self.vertRightBorder = vertRightBorder
-  self.name = name
-  self.statusText = statusText
-  self.roleIcon = roleIcon
-  self.aggroHighlight = aggroHighlight
-  self.myHealAbsorb = myHealAbsorb
-  self.myHealAbsorbLeftShadow = myHealAbsorbLeftShadow
-  self.myHealAbsorbRightShadow = myHealAbsorbRightShadow
-  self.overAbsorbGlow = overAbsorbGlow
-  self.overHealAbsorbGlow = overHealAbsorbGlow
-  self.selectionHighlight = selectionHighlight
-  self.readyCheckIcon = readyCheckIcon
-  self.healthBar = healthBar
-  self.healthBar.background = healthBarBackground
-  self.powerBar = powerBar
-  self.powerBar.background = powerBarBackground
-  self.centerStatusIcon = centerStatusIcon
-  self.centerStatusIcon.texture = centerStatusIconTexture
-  self.centerStatusIcon.border = centerStatusIconBorder
-  self.dropDown = dropDown
+  frame.background = background
+  frame.myHealPrediction = myHealPrediction
+  frame.otherHealPrediction = otherHealPrediction
+  frame.totalAbsorb = totalAbsorb
+  frame.totalAbsorbOverlay = totalAbsorbOverlay
+  frame.horizDivider = horizDivider
+  frame.horizTopBorder = horizTopBorder
+  frame.horizBottomBorder = horizBottomBorder
+  frame.vertLeftBorder = vertLeftBorder
+  frame.vertRightBorder = vertRightBorder
+  frame.name = name
+  frame.statusText = statusText
+  frame.roleIcon = roleIcon
+  frame.aggroHighlight = aggroHighlight
+  frame.myHealAbsorb = myHealAbsorb
+  frame.myHealAbsorbLeftShadow = myHealAbsorbLeftShadow
+  frame.myHealAbsorbRightShadow = myHealAbsorbRightShadow
+  frame.overAbsorbGlow = overAbsorbGlow
+  frame.overHealAbsorbGlow = overHealAbsorbGlow
+  frame.selectionHighlight = selectionHighlight
+  frame.readyCheckIcon = readyCheckIcon
+  frame.healthBar = healthBar
+  frame.healthBar.background = healthBarBackground
+  frame.powerBar = powerBar
+  frame.powerBar.background = powerBarBackground
+  frame.centerStatusIcon = centerStatusIcon
+  frame.centerStatusIcon.texture = centerStatusIconTexture
+  frame.centerStatusIcon.border = centerStatusIconBorder
+  frame.dropDown = dropDown
 
-  self:RegisterEvent("PLAYER_ENTERING_WORLD")
-  self:RegisterEvent("UNIT_DISPLAYPOWER")
-  self:RegisterEvent("UNIT_POWER_BAR_SHOW")
-  self:RegisterEvent("UNIT_POWER_BAR_HIDE")
-  self:RegisterEvent("UNIT_NAME_UPDATE")
-  self:RegisterEvent("PLAYER_TARGET_CHANGED")
-  self:RegisterEvent("PLAYER_REGEN_ENABLED")
-  self:RegisterEvent("PLAYER_REGEN_DISABLED")
-  self:RegisterEvent("UNIT_CONNECTION")
-  self:RegisterEvent("PLAYER_ROLES_ASSIGNED")
-  self:RegisterEvent("UNIT_ENTERED_VEHICLE")
-  self:RegisterEvent("UNIT_EXITED_VEHICLE")
-  self:RegisterEvent("UNIT_PET")
-  self:RegisterEvent("READY_CHECK")
-  self:RegisterEvent("READY_CHECK_FINISHED")
-  self:RegisterEvent("READY_CHECK_CONFIRM")
-  self:RegisterEvent("PARTY_MEMBER_DISABLE")
-  self:RegisterEvent("PARTY_MEMBER_ENABLE")
-  self:RegisterEvent("INCOMING_RESURRECT_CHANGED")
-  self:RegisterEvent("UNIT_OTHER_PARTY_CHANGED")
-  self:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED")
-  self:RegisterEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED")
-  self:RegisterEvent("UNIT_PHASE")
-  self:RegisterEvent("UNIT_CTR_OPTIONS")
-  self:RegisterEvent("UNIT_FLAGS")
-  self:RegisterEvent("INCOMING_SUMMON_CHANGED")
-  self:RegisterEvent("GROUP_ROSTER_UPDATE")
+  frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+  frame:RegisterEvent("UNIT_DISPLAYPOWER")
+  frame:RegisterEvent("UNIT_POWER_BAR_SHOW")
+  frame:RegisterEvent("UNIT_POWER_BAR_HIDE")
+  frame:RegisterEvent("UNIT_NAME_UPDATE")
+  frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+  frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+  frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+  frame:RegisterEvent("UNIT_CONNECTION")
+  frame:RegisterEvent("PLAYER_ROLES_ASSIGNED")
+  frame:RegisterEvent("UNIT_ENTERED_VEHICLE")
+  frame:RegisterEvent("UNIT_EXITED_VEHICLE")
+  frame:RegisterEvent("UNIT_PET")
+  frame:RegisterEvent("READY_CHECK")
+  frame:RegisterEvent("READY_CHECK_FINISHED")
+  frame:RegisterEvent("READY_CHECK_CONFIRM")
+  frame:RegisterEvent("PARTY_MEMBER_DISABLE")
+  frame:RegisterEvent("PARTY_MEMBER_ENABLE")
+  frame:RegisterEvent("INCOMING_RESURRECT_CHANGED")
+  frame:RegisterEvent("UNIT_OTHER_PARTY_CHANGED")
+  frame:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED")
+  frame:RegisterEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED")
+  frame:RegisterEvent("UNIT_PHASE")
+  frame:RegisterEvent("UNIT_CTR_OPTIONS")
+  frame:RegisterEvent("UNIT_FLAGS")
+  frame:RegisterEvent("INCOMING_SUMMON_CHANGED")
+  frame:RegisterEvent("GROUP_ROSTER_UPDATE")
   -- also see UpdateUnitEvents for more events
 
-  self.maxBuffs = 0
-  self.maxDebuffs = 0
-  self.maxDispelDebuffs = 0
-  AddOn:SetOptionTable(self, OPTION_TABLE_NONE)
-  AddOn:SetUpClicks(self)
-  AddOn:SetUpFrame(self, AddOn.DefaultSetup)
+  frame.maxBuffs = 0
+  frame.maxDebuffs = 0
+  frame.maxDispelDebuffs = 0
+  AddOn:SetOptionTable(frame, OPTION_TABLE_NONE)
+  AddOn:SetUpClicks(frame)
+  AddOn:SetUpFrame(frame, AddOn.DefaultSetup)
 end
 
 function AddOn:OnEvent(event, arg1)
   if event == "GROUP_ROSTER_UPDATE" then
-    AddOn:UpdateAll(self, true)
+    AddOn:UpdateAll(self)
   elseif event == "PLAYER_ENTERING_WORLD" then
     local inInstance, instanceType = IsInInstance()
     --SetCVar("chatBubbles", isInstance and "0" or "1")
@@ -686,7 +1021,7 @@ function AddOn:OnEvent(event, arg1)
     AddOn:UpdateSelectionHighlight(self)
     AddOn:UpdateName(self)
   elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
-    if self.mouseIsOver then
+    if self.mouseIsOver and self.optionTable.hideTooltipInCombat then
       GameTooltip:Hide()
     end
     AddOn:UpdateAuras(self) -- We filter differently based on whether the player is in Combat, so we need to update when that changes.
@@ -859,17 +1194,16 @@ function AddOn:SetMaxDispelDebuffs(frame, numDispelDebuffs)
 end
 
 -- Update Functions
-function AddOn:UpdateAll(frame, rosterUpdate)
-  if rosterUpdate then
-
-  end
+function AddOn:UpdateAll(frame)
   self:UpdateInVehicle(frame)
   self:UpdateVisible(frame)
   if UnitExists(frame.displayedUnit) then
     self:UpdateMaxHealth(frame)
     self:UpdateHealth(frame)
     self:UpdateHealthColor(frame)
-    self:UpdatePowerBarVisibility(frame)
+    if frame.optionTable.showHealerManaOnly then
+      self:UpdatePowerBarVisibility(frame)
+    end
     self:UpdateMaxPower(frame)
     self:UpdatePower(frame)
     self:UpdatePowerColor(frame)
@@ -885,36 +1219,37 @@ function AddOn:UpdateAll(frame, rosterUpdate)
     self:UpdateCenterStatusIcon(frame)
   end
 
-  -- DerangementShieldMeters
-  if not frame.totalAbsorb or frame.totalAbsorb:IsForbidden() then return end
+  if frame.optionTable.showOverAbsorb then
+    -- DerangementShieldMeters
+    if not frame.totalAbsorb or frame.totalAbsorb:IsForbidden() then return end
+    if not frame.totalAbsorbOverlay or frame.totalAbsorbOverlay:IsForbidden() then return end
+    if not frame.healthBar or frame.healthBar:IsForbidden() then return end
 
-  if not frame.totalAbsorbOverlay or frame.totalAbsorbOverlay:IsForbidden() then return end
+    frame.totalAbsorbOverlay:SetParent(frame.healthBar)
+    -- TODO: This seems to completly hide the absorb upon reloading.
+    frame.totalAbsorbOverlay:ClearAllPoints()		--we'll be attaching the overlay on heal prediction update.
 
-  if not frame.healthBar or frame.healthBar:IsForbidden() then return end
-
-  frame.totalAbsorbOverlay:SetParent(frame.healthBar)
-  frame.totalAbsorbOverlay:ClearAllPoints()		--we'll be attaching the overlay on heal prediction update.
-
-  if frame.overAbsorbGlow and not frame.overAbsorbGlow:IsForbidden() then
-    frame.overAbsorbGlow:ClearAllPoints()
-    frame.overAbsorbGlow:SetPoint("TOPLEFT", frame.totalAbsorbOverlay, "TOPLEFT", -5, 0)
-    frame.overAbsorbGlow:SetPoint("BOTTOMLEFT", frame.totalAbsorbOverlay, "BOTTOMLEFT", -5, 0)
-    frame.overAbsorbGlow:SetAlpha(0.6)
+    if frame.overAbsorbGlow and not frame.overAbsorbGlow:IsForbidden() then
+      frame.overAbsorbGlow:ClearAllPoints()
+      frame.overAbsorbGlow:SetPoint("TOPLEFT", frame.totalAbsorbOverlay, "TOPLEFT", -5, 0)
+      frame.overAbsorbGlow:SetPoint("BOTTOMLEFT", frame.totalAbsorbOverlay, "BOTTOMLEFT", -5, 0)
+      frame.overAbsorbGlow:SetAlpha(0.6)
+    end
   end
 end
 
 function AddOn:UpdatePowerBarVisibility(frame)
-  local options = self.DefaultSetupOptions
+  local width, height = frame:GetSize()
   local role = UnitGroupRolesAssigned(frame.unit)
   local _, class = UnitClass(frame.unit)
-  local displayPowerBar = options.displayPowerBar and role == "HEALER" or options.displayPowerBar and class == "DEATHKNIGHT" and role == "TANK"
+  local displayPowerBar = self.db.profile.displayPowerBar and role == "HEALER" or self.db.profile.displayPowerBar and class == "DEATHKNIGHT" and role == "TANK"
   local powerBarHeight = 8
   local powerBarUsedHeight = displayPowerBar and powerBarHeight or 0
 
   frame.healthBar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1 + powerBarUsedHeight)
 
   if displayPowerBar then
-    if options.displayBorder then
+    if self.db.profile.displayBorder then
       frame.powerBar:SetPoint("TOPLEFT", frame.healthBar, "BOTTOMLEFT", 0, -2)
     else
       frame.powerBar:SetPoint("TOPLEFT", frame.healthBar, "BOTTOMLEFT", 0, 0)
@@ -931,10 +1266,10 @@ function AddOn:UpdatePowerBarVisibility(frame)
 
   frame.debuffFrames[1]:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 3, CUF_AURA_BOTTOM_OFFSET + powerBarUsedHeight)
   for i = 1, #frame.debuffFrames do
-    frame.debuffFrames[i].maxHeight = options.height - powerBarUsedHeight - CUF_AURA_BOTTOM_OFFSET - CUF_NAME_SECTION_SIZE
+    frame.debuffFrames[i].maxHeight = height - powerBarUsedHeight - CUF_AURA_BOTTOM_OFFSET - CUF_NAME_SECTION_SIZE
   end
 
-  if options.displayBorder then
+  if self.db.profile.displayBorder then
     if displayPowerBar then
       frame.horizDivider:ClearAllPoints()
       frame.horizDivider:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, 1 + powerBarUsedHeight)
@@ -1095,33 +1430,21 @@ function AddOn:UpdatePowerColor(frame)
     -- Color it gray
     r, g, b = 0.5, 0.5, 0.5
   else
-    -- TODO: Mana of the Restoration Druid sometimes appears as Maelstrom.
     -- Set it to the proper power type color.
     local barInfo = GetUnitPowerBarInfo(frame.unit)
     if barInfo and barInfo.showOnRaid then
       r, g, b = 0.7, 0.7, 0.6
     else
-      --local role = UnitGroupRolesAssigned(frame.unit)
-      --local _, class = UnitClass(frame.unit)
       local powerType, powerToken, altR, altG, altB = UnitPowerType(frame.displayedUnit)
       local info = PowerBarColor[powerToken]
       if info then
-        --if class and class == "DRUID" and role and role == "HEALER" then
-        --  debug((frame.name:GetText() or "nil") .. ", info, powerType = " .. (powerType or "nil") .. ", powerToken = " .. (powerToken or "nil") .. ", ", info.r, info.g, info.b)
-        --end
         r, g, b = info.r, info.g, info.b
       else
         if not altR then
           -- couldn't find a power token entry...default to indexing by power type or just mana if we don't have that either
           info = PowerBarColor[powerType] or PowerBarColor["MANA"]
-          --if class and class == "DRUID" and role and role == "HEALER" then
-          --  debug(frame.name:GetText() .. ", not altR, powerType = " .. powerType .. ", powerToken = " .. powerToken .. ", ", info.r, info.g, info.b)
-          --end
           r, g, b = info.r, info.g, info.b
         else
-          --if class and class == "DRUID" and role and role == "HEALER" then
-          --  debug(frame.name:GetText() .. ", altR, powerType = " .. powerType .. ", powerToken = " .. powerToken .. ", ", altR, altG, altB)
-          --end
           r, g, b = altR, altG, altB
         end
       end
@@ -1158,7 +1481,7 @@ function AddOn:UpdateName(frame)
     frame.name:Hide()
   else
     local unitName = GetUnitName(frame.unit, true)
-    if UnitInRaid(frame.unit) then
+    if frame.optionTable.showGroupNumber and UnitInRaid(frame.unit) then
       for i = 1, GetNumGroupMembers() do
         local name, _, subGroup = GetRaidRosterInfo(i)
         if name == unitName then
@@ -1420,36 +1743,39 @@ function AddOn:UpdateHealPrediction(frame)
   end
   self:Util_UpdateFillBar(frame, appendTexture, frame.totalAbsorb, totalAbsorb)
 
-  -- DerangementShieldMeters
-  if not frame.totalAbsorb or frame.totalAbsorb:IsForbidden() then return end
-  if not frame.totalAbsorbOverlay or frame.totalAbsorbOverlay:IsForbidden() then return end
-  if not frame.healthBar or frame.healthBar:IsForbidden() then return end
+  if frame.optionTable.showOverAbsorb then
+    -- DerangementShieldMeters
+    if not frame.totalAbsorb or frame.totalAbsorb:IsForbidden() then return end
+    if not frame.totalAbsorbOverlay or frame.totalAbsorbOverlay:IsForbidden() then return end
+    if not frame.healthBar or frame.healthBar:IsForbidden() then return end
 
-  _, maxHealth = frame.healthBar:GetMinMaxValues()
-  if maxHealth <= 0 then return end
+    maxHealth = select(2, frame.healthBar:GetMinMaxValues())
+    if maxHealth <= 0 then return end
 
-  totalAbsorb = UnitGetTotalAbsorbs(frame.displayedUnit) or 0
-  if totalAbsorb > maxHealth then
-    totalAbsorb = maxHealth
-  end
-
-  if totalAbsorb > 0 then	--show overlay when there's a positive absorb amount
-    if frame.totalAbsorb:IsShown() then		--If absorb bar is shown, attach absorb overlay to it; otherwise, attach to health bar.
-      frame.totalAbsorbOverlay:SetPoint("TOPRIGHT", frame.totalAbsorb, "TOPRIGHT", 0, 0)
-      frame.totalAbsorbOverlay:SetPoint("BOTTOMRIGHT", frame.totalAbsorb, "BOTTOMRIGHT", 0, 0)
-    else
-      frame.totalAbsorbOverlay:SetPoint("TOPRIGHT", frame.healthBar, "TOPRIGHT", 0, 0)
-      frame.totalAbsorbOverlay:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, 0)
+    totalAbsorb = UnitGetTotalAbsorbs(frame.displayedUnit) or 0
+    if totalAbsorb > maxHealth then
+      totalAbsorb = maxHealth
     end
 
-    local totalWidth, totalHeight = frame.healthBar:GetSize()
-    local barSize = totalAbsorb / maxHealth * totalWidth
+    if totalAbsorb > 0 then	--show overlay when there's a positive absorb amount
+      if frame.totalAbsorb:IsShown() then		--If absorb bar is shown, attach absorb overlay to it; otherwise, attach to health bar.
+        frame.totalAbsorbOverlay:SetPoint("TOPRIGHT", frame.totalAbsorb, "TOPRIGHT", 0, 0)
+        frame.totalAbsorbOverlay:SetPoint("BOTTOMRIGHT", frame.totalAbsorb, "BOTTOMRIGHT", 0, 0)
+      else
+        frame.totalAbsorbOverlay:SetPoint("TOPRIGHT", frame.healthBar, "TOPRIGHT", 0, 0)
+        frame.totalAbsorbOverlay:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, 0)
+      end
 
-    frame.totalAbsorbOverlay:SetWidth( barSize )
-    frame.totalAbsorbOverlay:SetTexCoord(0, barSize / frame.totalAbsorbOverlay.tileSize, 0, totalHeight / frame.totalAbsorbOverlay.tileSize)
-    frame.totalAbsorbOverlay:Show()
+      local totalWidth, totalHeight = frame.healthBar:GetSize()
+      local barSize = totalAbsorb / maxHealth * totalWidth
 
-    --frame.overAbsorbGlow:Show();	--uncomment this if you want to ALWAYS show the glow to the left of the shield overlay
+      frame.totalAbsorbOverlay:GetWidth() -- TODO: This seems to fix the hidden absorb after a reload for a completly unknown reason.
+      frame.totalAbsorbOverlay:SetWidth(barSize)
+      frame.totalAbsorbOverlay:SetTexCoord(0, barSize / frame.totalAbsorbOverlay.tileSize, 0, totalHeight / frame.totalAbsorbOverlay.tileSize)
+      frame.totalAbsorbOverlay:Show()
+
+      --frame.overAbsorbGlow:Show();	--uncomment this if you want to ALWAYS show the glow to the left of the shield overlay
+    end
   end
 end
 
@@ -1865,7 +2191,7 @@ function AddOn:Util_ShouldDisplayDebuff(...)
   local _, _, _, _, _, _, unitCaster, _, _, spellId = ...
 
   local hasCustom, alwaysShowMine, showForMySpec = SpellGetVisibilityInfo(spellId, UnitAffectingCombat("player") and "RAID_INCOMBAT" or "RAID_OUTOFCOMBAT")
-  if spellId == 25771 then -- Always show Forbearance
+  if self.db.profile.alwaysShowForbearance and spellId == 25771 then -- Always show Forbearance
     return true
   elseif hasCustom then
     return showForMySpec or alwaysShowMine and (unitCaster == "player" or unitCaster == "pet" or unitCaster == "vehicle")	-- Would only be "mine" in the case of something like forbearance.
@@ -1998,22 +2324,15 @@ local NATIVE_UNIT_FRAME_HEIGHT = 36
 local NATIVE_UNIT_FRAME_WIDTH = 72
 
 function AddOn.DefaultSetup(frame, groupType)
-  AddOn.DefaultSetupOptions = {
-    displayPowerBar = true,
-    height = AddOn:GetHeight(groupType or GetNumGroupMembers()),
-    width = AddOn:GetWidth(groupType or GetNumGroupMembers()),
-    displayBorder = false
-  }
-  local options = AddOn.DefaultSetupOptions
-  --options.width = frame:GetWidth()
-  --options.height = frame:GetHeight()
-  local componentScale = min(options.height / NATIVE_UNIT_FRAME_HEIGHT, options.width / NATIVE_UNIT_FRAME_WIDTH)
+  local width = GetUnitFrameWidth(groupType or GetNumGroupMembers())
+  local height = GetUnitFrameHeight(groupType or GetNumGroupMembers())
+  local componentScale = min(height / NATIVE_UNIT_FRAME_HEIGHT, width / NATIVE_UNIT_FRAME_WIDTH)
 
   frame:SetAlpha(1)
 
-  frame:SetSize(options.width, options.height)
+  NoCombatFunction(frame, frame.SetSize, { width, height }, true)
   local powerBarHeight = 8
-  local powerBarUsedHeight = options.displayPowerBar and powerBarHeight or 0
+  local powerBarUsedHeight = AddOn.db.profile.displayPowerBar and powerBarHeight or 0
 
   frame.background:SetTexture("Interface\\RaidFrame\\Raid-Bar-Hp-Bg")
   frame.background:SetTexCoord(0, 1, 0, 0.53125)
@@ -2023,8 +2342,8 @@ function AddOn.DefaultSetup(frame, groupType)
 
   frame.healthBar:SetStatusBarTexture("Interface\\RaidFrame\\Raid-Bar-Hp-Fill", "BORDER")
 
-  if options.displayPowerBar then
-    if options.displayBorder then
+  if AddOn.db.profile.displayPowerBar then
+    if AddOn.db.profile.displayBorder then
       frame.powerBar:SetPoint("TOPLEFT", frame.healthBar, "BOTTOMLEFT", 0, -2)
     else
       frame.powerBar:SetPoint("TOPLEFT", frame.healthBar, "BOTTOMLEFT", 0, 0)
@@ -2077,13 +2396,13 @@ function AddOn.DefaultSetup(frame, groupType)
   local NATIVE_FONT_SIZE = 12
   local fontName, _, fontFlags = frame.statusText:GetFont()
   frame.statusText:SetFont(fontName, NATIVE_FONT_SIZE * componentScale, fontFlags)
-  frame.statusText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 3, options.height / 3 - 2)
-  frame.statusText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -3, options.height / 3 - 2)
+  frame.statusText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 3, height / 3 - 2)
+  frame.statusText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -3, height / 3 - 2)
   frame.statusText:SetHeight(12 * componentScale)
 
   local readyCheckSize = 15 * componentScale
   frame.readyCheckIcon:ClearAllPoints()
-  frame.readyCheckIcon:SetPoint("BOTTOM", frame, "BOTTOM", 0, options.height / 3 - 4)
+  frame.readyCheckIcon:SetPoint("BOTTOM", frame, "BOTTOM", 0, height / 3 - 4)
   frame.readyCheckIcon:SetSize(readyCheckSize, readyCheckSize)
 
   local buffSize = 11 * componentScale
@@ -2112,7 +2431,7 @@ function AddOn.DefaultSetup(frame, groupType)
       frame.debuffFrames[i]:SetPoint(debuffPos, frame.debuffFrames[i - 1], debuffRelativePoint, 0, 0)
     end
     frame.debuffFrames[i].baseSize = buffSize
-    frame.debuffFrames[i].maxHeight = options.height - powerBarUsedHeight - CUF_AURA_BOTTOM_OFFSET - CUF_NAME_SECTION_SIZE
+    frame.debuffFrames[i].maxHeight = height - powerBarUsedHeight - CUF_AURA_BOTTOM_OFFSET - CUF_NAME_SECTION_SIZE
   end
 
   frame.dispelDebuffFrames[1]:SetPoint("TOPRIGHT", -3, -2)
@@ -2132,10 +2451,10 @@ function AddOn.DefaultSetup(frame, groupType)
   frame.aggroHighlight:SetAllPoints(frame)
 
   frame.centerStatusIcon:ClearAllPoints()
-  frame.centerStatusIcon:SetPoint("CENTER", frame, "BOTTOM", 0, options.height / 3 + 2)
+  frame.centerStatusIcon:SetPoint("CENTER", frame, "BOTTOM", 0, height / 3 + 2)
   frame.centerStatusIcon:SetSize(buffSize * 2, buffSize * 2)
 
-  if options.displayBorder then
+  if AddOn.db.profile.displayBorder then
     frame.horizTopBorder:ClearAllPoints()
     frame.horizTopBorder:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, -7)
     frame.horizTopBorder:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", 0, -7)
@@ -2164,7 +2483,7 @@ function AddOn.DefaultSetup(frame, groupType)
     frame.vertRightBorder:SetWidth(8)
     frame.vertRightBorder:Show()
 
-    if options.displayPowerBar then
+    if AddOn.db.profile.displayPowerBar then
       frame.horizDivider:ClearAllPoints()
       frame.horizDivider:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, 1 + powerBarUsedHeight)
       frame.horizDivider:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, 1 + powerBarUsedHeight)
@@ -2184,187 +2503,48 @@ function AddOn.DefaultSetup(frame, groupType)
   end
 
   AddOn:SetOptionTable(frame, AddOn.db.profile)
+
+  if groupType then
+    --AddOn:UpdateInVehicle(frame)
+    --AddOn:UpdateVisible(frame)
+    if UnitExists(frame.displayedUnit) then
+      --AddOn:UpdateMaxHealth(frame)
+      --AddOn:UpdateHealth(frame)
+      --AddOn:UpdateHealthColor(frame)
+      if frame.optionTable.showHealerManaOnly then
+        AddOn:UpdatePowerBarVisibility(frame)
+      end
+      --AddOn:UpdateMaxPower(frame)
+      --AddOn:UpdatePower(frame)
+      --AddOn:UpdatePowerColor(frame)
+      --AddOn:UpdateName(frame)
+      --AddOn:UpdateSelectionHighlight(frame)
+      --AddOn:UpdateAggroHighlight(frame)
+      --AddOn:UpdateInRange(frame)
+      --AddOn:UpdateStatusText(frame)
+      --AddOn:UpdateHealPrediction(frame)
+      AddOn:UpdateRoleIcon(frame)
+      --AddOn:UpdateReadyCheck(frame)
+      --AddOn:UpdateAuras(frame)
+      --AddOn:UpdateCenterStatusIcon(frame)
+    end
+
+    if frame.optionTable.showOverAbsorb then
+      -- DerangementShieldMeters
+      if not frame.totalAbsorb or frame.totalAbsorb:IsForbidden() then return end
+      if not frame.totalAbsorbOverlay or frame.totalAbsorbOverlay:IsForbidden() then return end
+      if not frame.healthBar or frame.healthBar:IsForbidden() then return end
+
+      frame.totalAbsorbOverlay:SetParent(frame.healthBar)
+      frame.totalAbsorbOverlay:ClearAllPoints()		--we'll be attaching the overlay on heal prediction update.
+
+      if frame.overAbsorbGlow and not frame.overAbsorbGlow:IsForbidden() then
+        frame.overAbsorbGlow:ClearAllPoints()
+        frame.overAbsorbGlow:SetPoint("TOPLEFT", frame.totalAbsorbOverlay, "TOPLEFT", -5, 0)
+        frame.overAbsorbGlow:SetPoint("BOTTOMLEFT", frame.totalAbsorbOverlay, "BOTTOMLEFT", -5, 0)
+        frame.overAbsorbGlow:SetAlpha(0.6)
+      end
+    end
+  end
 end
 
-function AddOn:CreateOrUpdateHeaders()
-  oUF:SetActiveStyle("RaidFrames")
-  -- TODO: Find a way to have separated columns for each group.
-  --[[
-  List of the various configuration attributes
-  ======================================================
-  showRaid = [BOOLEAN] -- true if the header should be shown while in a raid
-  showParty = [BOOLEAN] -- true if the header should be shown while in a party and not in a raid
-  showPlayer = [BOOLEAN] -- true if the header should show the player when not in a raid
-  showSolo = [BOOLEAN] -- true if the header should be shown while not in a group (implies showPlayer)
-  nameList = [STRING] -- a comma separated list of player names (not used if 'groupFilter' is set)
-  groupFilter = [1-8, STRING] -- a comma seperated list of raid group numbers and/or uppercase class names and/or uppercase roles
-  roleFilter = [STRING] -- a comma seperated list of MT/MA/Tank/Healer/DPS role strings
-  strictFiltering = [BOOLEAN]
-  -- if true, then
-  ---- if only groupFilter is specified then characters must match both a group and a class from the groupFilter list
-  ---- if only roleFilter is specified then characters must match at least one of the specified roles
-  ---- if both groupFilter and roleFilters are specified then characters must match a group and a class from the groupFilter list and a role from the roleFilter list
-  point = [STRING] -- a valid XML anchoring point (Default: "TOP")
-  xOffset = [NUMBER] -- the x-Offset to use when anchoring the unit buttons (Default: 0)
-  yOffset = [NUMBER] -- the y-Offset to use when anchoring the unit buttons (Default: 0)
-  sortMethod = ["INDEX", "NAME", "NAMELIST"] -- defines how the group is sorted (Default: "INDEX")
-  sortDir = ["ASC", "DESC"] -- defines the sort order (Default: "ASC")
-  template = [STRING] -- the XML template to use for the unit buttons
-  templateType = [STRING] - specifies the frame type of the managed subframes (Default: "Button")
-  groupBy = [nil, "GROUP", "CLASS", "ROLE", "ASSIGNEDROLE"] - specifies a "grouping" type to apply before regular sorting (Default: nil)
-  groupingOrder = [STRING] - specifies the order of the groupings (ie. "1,2,3,4,5,6,7,8")
-  maxColumns = [NUMBER] - maximum number of columns the header will create (Default: 1)
-  unitsPerColumn = [NUMBER or nil] - maximum units that will be displayed in a singe column, nil is infinite (Default: nil)
-  startingIndex = [NUMBER] - the index in the final sorted unit list at which to start displaying units (Default: 1)
-  columnSpacing = [NUMBER] - the amount of space between the rows/columns (Default: 0)
-  columnAnchorPoint = [STRING] - the anchor point of each new column (ie. use LEFT for the columns to grow to the right)
-  --]]
-
-  --"roleFilter", "MAINTANK,MAINASSIS T,TANK,HEALER,DAMAGER,NONE",
-  --"groupFilter", "WARRIOR,DEATHKNIGHT,PALADIN,MONK,PRIEST,SHAMAN,DRUID,ROGUE,MAGE,WARLOCK,HUNTER,DEMONHUNTER",
-
-  --local isDamager = ElvDB and ElvDB.profileKeys and ElvDB.profileKeys[ElvUI[1].mynameRealm] == "Meivyn"
-
-  if not self.headers then
-    self.headers = {}
-  end
-
-  if AddOn.db.profile.displayPartyGroup then
-  -- Party (1 to 5 players)
-  local party = oUF:SpawnHeader("oUF_Party", nil, "custom [@raid6,exists] hide; show",
-    "showRaid", true,
-    "showParty", true,
-    "showPlayer", true,
-    "point", "LEFT",
-    "sortMethod", "NAME",
-    "groupBy", "ASSIGNEDROLE",
-    "groupingOrder", "TANK,HEALER,DAMAGER,NONE",
-  --"maxColumns", 5,
-  --"unitsPerColumn", 1,
-  --"columnAnchorPoint", "TOP",
-    "columnAnchorPoint", character == "Meivyn" and "TOP" or "LEFT",
-    "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', AddOn:GetWidth("party"), AddOn:GetHeight("party"))
-    )
-  if isDamager then
-    party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 200)
-  else
-    --party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
-    party:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY)
-  end
-  AddOn.headers.party = party
-  end
-  -- Raid 20 (6 to 20 players)
-  local raid20 = oUF:SpawnHeader("oUF_Raid20", nil, "custom [@raid6,noexists][@raid21,exists] hide; show",
-    "showRaid", true,
-    "showParty", false,
-    "showPlayer", true,
-    "sortMethod", "NAME",
-    "groupBy", "ASSIGNEDROLE",
-    "groupingOrder", "TANK,DAMAGER,HEALER,NONE",
-    "maxColumns", 4,
-    "unitsPerColumn", 5,
-    "columnAnchorPoint", "LEFT",
-    "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', AddOn:GetWidth("raid20"), AddOn:GetHeight("raid20"))
-  )
-  if character == "Meivyn" then
-    raid20:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 4, 516)
-  else
-    --raid20:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 758, 258)
-    raid20:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY)
-  end
-  AddOn.headers.raid20 = raid20
-  -- Raid 25 (21 to 25 players)
-  local raid25 = oUF:SpawnHeader("oUF_Raid25", nil, "custom [@raid21,noexists][@raid26,exists] hide; show",
-    "showRaid", true,
-    "showParty", false,
-    "showPlayer", true,
-    "sortMethod", "NAME",
-    "groupBy", "ASSIGNEDROLE",
-    "groupingOrder", "TANK,DAMAGER,HEALER,NONE",
-    "maxColumns", 5,
-    "unitsPerColumn", 5,
-    "columnAnchorPoint", "LEFT",
-    "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', AddOn:GetWidth("raid25"), AddOn:GetHeight("raid25"))
-  )
-  if character == "Meivyn" then
-  else
-    --raid25:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
-    raid25:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY)
-  end
-  AddOn.headers.raid25 = raid25
-  -- Raid 40 (26 to 40 players)
-  local raid40 = oUF:SpawnHeader("oUF_Raid40", nil, "custom [@raid26,noexists] hide; show",
-    "showRaid", true,
-    "showParty", false,
-    "showPlayer", true,
-    "point", "LEFT",
-    "sortMethod", "NAME",
-    "groupBy", "ASSIGNEDROLE",
-    "groupingOrder", "TANK,DAMAGER,HEALER,NONE",
-    "maxColumns", 8,
-    "unitsPerColumn", 5,
-    "columnAnchorPoint", "TOP",
-    "oUF-initialConfigFunction", format('self:SetWidth(%d); self:SetHeight(%d);', AddOn:GetWidth("raid40"), AddOn:GetHeight("raid40"))
-  )
-  if character == "Meivyn" then
-  else
-    --raid40:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
-    raid40:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY)
-  end
-  AddOn.headers.raid40 = raid40
-end
-
-oUF:RegisterStyle("RaidFrames", AddOn.ConstructFrames)
-oUF:Factory(function(self)
-    AddOn:CreateOrUpdateHeaders()
-end)
-
-function AddOn:GetWidth(groupSizeOrType)
-  local width
-  if type(groupSizeOrType) == "number" then
-    width = math.floor(self.db.profile.width / ((groupSizeOrType <= 5 or groupSizeOrType > 20) and 5 or 4))
-  else
-    width = math.floor(self.db.profile.width / (groupSizeOrType == "raid20" and 4 or 5) + 0.5)
-  end
-  return width
-end
-
-function AddOn:GetHeight(groupSizeOrType)
-  local height
-  if type(groupSizeOrType) == "number" then
-    height = math.floor(self.db.profile.height / (groupSizeOrType > 25 and 8 or 5))
-  else
-    height = math.floor(self.db.profile.height / (groupSizeOrType == "raid40" and 8 or 5) + 0.5)
-  end
-  return height
-end
-
---local resetHeader = self:SpawnHeader("RaidFrames", nil, "raid,party",
---  "showRaid", true,
---  "showParty", true,
---  "showPlayer", true,
---  "showSolo", true,
---  "nameList", nil,
---  "groupFilter", nil,
---  "roleFilter", nil,
---  "strictFiltering", nil,
---  "point", "LEFT",
---  "xOffset", nil,
---  "yOffset", nil,
---  "sortMethod", "NAME",
---  "sortDir", nil,
---  "groupBy", nil,
---  "groupingOrder", nil,
---  "maxColumns", nil,
---  "unitsPerColumn", nil,
---  "startingIndex", nil,
---  "columnSpacing", nil,
---  "columnAnchorPoint", nil,
---  "oUF-initialConfigFunction", ([[
---      --self:SetWidth(271) -- 81.2
---      --self:SetHeight(51) -- 50.6
---      self:SetWidth(81) -- 81.2
---      self:SetHeight(51) -- 50.6
---    ]])
---)
---header:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
