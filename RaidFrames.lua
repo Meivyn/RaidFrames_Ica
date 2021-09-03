@@ -67,6 +67,9 @@ local AceConsole = LibStub("AceConsole-3.0")
 
 RaidFrames = ns
 
+local NATIVE_UNIT_FRAME_HEIGHT = 36
+local NATIVE_UNIT_FRAME_WIDTH = 72
+
 local function debug(...)
   if not ... then return end
   if type(...) == "table" then
@@ -77,7 +80,7 @@ local function debug(...)
   end
 end
 
-local function NoCombatFunction(frame, func, args, debugMode)
+local function NoCombatFunction(self, func, args, debugMode)
   if not AddOn.noCombatFrame then
     AddOn.noCombatFrame = CreateFrame("Frame")
   end
@@ -87,19 +90,19 @@ local function NoCombatFunction(frame, func, args, debugMode)
     end
     AddOn.noCombatFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
     AddOn.noCombatFrame:SetScript("OnEvent", nil)
-    func(frame, unpack(args))
+    func(self, unpack(args))
   else
     if debugMode then
       debug("In combat.")
     end
     AddOn.noCombatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-    AddOn.noCombatFrame:SetScript("OnEvent", function(self, event)
+    AddOn.noCombatFrame:SetScript("OnEvent", function()
       if debugMode then
         debug("Leaving combat.")
       end
-      self:UnregisterEvent(event)
-      self:SetScript("OnEvent", nil)
-      func(frame, unpack(args))
+      AddOn.noCombatFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+      AddOn.noCombatFrame:SetScript("OnEvent", nil)
+      func(self, unpack(args))
     end)
   end
 end
@@ -153,6 +156,7 @@ local function GetOptions()
               name = COMPACT_UNIT_FRAME_PROFILE_SORTBY,
               type = "select",
               order = 3,
+              disabled = true,
               hidden = AddOn.db.profile.keepGroupsTogether,
               values = {
                 ["role"] = COMPACT_UNIT_FRAME_PROFILE_SORTBY_ROLE,
@@ -198,6 +202,7 @@ local function GetOptions()
               order = 8,
               set = function(info, value)
                 AddOn.db.profile.displayHealPrediction = value
+                AddOn:Update(AddOn.UpdateHealPrediction)
               end,
               get = function(info)
                 return AddOn.db.profile.displayHealPrediction
@@ -215,6 +220,7 @@ local function GetOptions()
               order = 11,
               set = function(info, value)
                 AddOn.db.profile.displayPowerBar = value
+                AddOn:Update(AddOn.UpdatePowerBarVisibility)
               end,
               get = function(info)
                 return AddOn.db.profile.displayPowerBar
@@ -232,6 +238,7 @@ local function GetOptions()
               order = 14,
               set = function(info, value)
                 AddOn.db.profile.displayAggroHighlight = value
+                AddOn:Update(AddOn.UpdateAggroHighlight)
               end,
               get = function(info)
                 return AddOn.db.profile.displayAggroHighlight
@@ -249,6 +256,7 @@ local function GetOptions()
               order = 17,
               set = function(info, value)
                 AddOn.db.profile.useClassColors = value
+                AddOn:Update(AddOn.UpdateHealthColor)
               end,
               get = function(info)
                 return AddOn.db.profile.useClassColors
@@ -319,6 +327,7 @@ local function GetOptions()
               order= 29,
               set = function(info, value)
                 AddOn.db.profile.displayDebuffs = value
+                AddOn:Update(AddOn.UpdateAuras)
               end,
               get = function(info)
                 return AddOn.db.profile.displayDebuffs
@@ -336,6 +345,7 @@ local function GetOptions()
               order= 32,
               set = function(info, value)
                 AddOn.db.profile.displayOnlyDispellableDebuffs = value
+                AddOn:Update(AddOn.UpdateAuras)
               end,
               get = function(info)
                 return AddOn.db.profile.displayOnlyDispellableDebuffs
@@ -360,13 +370,7 @@ local function GetOptions()
               sorting = { "none", "health", "losthealth", "perc" },
               set = function(info, value)
                 AddOn.db.profile.healthText = value
-                for _, header in pairs(AddOn.headers) do
-                  for i = 1, #header do
-                    local frame = header[i]
-                    AddOn:SetOptionTable(frame, AddOn.db.profile)
-                    AddOn:UpdateStatusText(frame)
-                  end
-                end
+                AddOn:Update(AddOn.UpdateStatusText)
               end,
               get = function(info)
                 return AddOn.db.profile.healthText
@@ -382,10 +386,8 @@ local function GetOptions()
               name = COMPACT_UNIT_FRAME_PROFILE_FRAMEHEIGHT,
               type = "range",
               order = 38,
-              min = 36 * 5,
-              max = 72 * 5,
-              softMin = 36 * 5,
-              softMax = 72 * 5,
+              min = NATIVE_UNIT_FRAME_HEIGHT * 5,
+              max = NATIVE_UNIT_FRAME_HEIGHT * 2 * 5,
               step = 1,
               set = function(info, value)
                 AddOn.db.profile.height = value
@@ -404,10 +406,8 @@ local function GetOptions()
               name = COMPACT_UNIT_FRAME_PROFILE_FRAMEWIDTH,
               type = "range",
               order = 39,
-              min = 72 * 5,
-              max = 144 * 5,
-              softMin = 72 * 5,
-              softMax = 144 * 5,
+              min = NATIVE_UNIT_FRAME_WIDTH * 5,
+              max = NATIVE_UNIT_FRAME_WIDTH * 2 * 5,
               step = 1,
               set = function(info, value)
                 AddOn.db.profile.width = value
@@ -433,14 +433,12 @@ local function GetOptions()
               type = "range",
               order = 42,
               min = 0,
-              max = 1920,
-              softMin = 0,
-              softMax = 1920,
+              max = GetPhysicalScreenSize(),
               step = 1,
               set = function(info, value)
                 AddOn.db.profile.offsetX = value
                 for _, header in pairs(AddOn.headers) do
-                  NoCombatFunction(header, header.SetPoint, { "TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY }, true)
+                  NoCombatFunction(header, header.SetPoint, { "TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY })
                 end
               end,
               get = function(info)
@@ -452,14 +450,12 @@ local function GetOptions()
               type = "range",
               order = 43,
               min = 0,
-              max = 1080,
-              softMin = 0,
-              softMax = 1080,
+              max = select(2, GetPhysicalScreenSize()),
               step = 1,
               set = function(info, value)
                 AddOn.db.profile.offsetY = value
                 for _, header in pairs(AddOn.headers) do
-                  NoCombatFunction(header, header.SetPoint, { "TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY }, true)
+                  NoCombatFunction(header, header.SetPoint, { "TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY })
                 end
               end,
               get = function(info)
@@ -512,13 +508,14 @@ local function GetOptions()
               order = 4,
               set = function(info, value)
                 AddOn.db.profile.showGroupNumber = value
+                AddOn:Update(AddOn.UpdateName)
               end,
               get = function(info)
                 return AddOn.db.profile.showGroupNumber
               end
             },
             alwaysShowForbearance = {
-              name = "Toujours afficher Longaminité",
+              name = "Toujours afficher Longanimité",
               type = "toggle",
               order = 5,
               set = function(info, value)
@@ -529,11 +526,13 @@ local function GetOptions()
               end
             },
             showHealerManaOnly = {
-              name = "Barres d'énergie des soigneurs uniquement",
+              name = COMPACT_UNIT_FRAME_PROFILE_DISPLAYPOWERBAR .. " des soigneurs uniquement",
+              desc = "Affiche aussi la barre de puissance runique des tanks Chevalier de la mort.",
               type = "toggle",
               order = 6,
               set = function(info, value)
                 AddOn.db.profile.showHealerManaOnly = value
+                AddOn:Update(AddOn.UpdatePowerBarVisibility)
               end,
               get = function(info)
                 return AddOn.db.profile.showHealerManaOnly
@@ -545,17 +544,20 @@ local function GetOptions()
               order= 7,
               set = function(info, value)
                 AddOn.db.profile.displayPartyGroup = value
+                NoCombatFunction(AddOn, AddOn.CreateAndUpdateHeaderGroup, { "party" })
+                --AddOn:CreateAndUpdateHeaderGroup("party")
               end,
               get = function(info)
                 return AddOn.db.profile.displayPartyGroup
               end
             },
             colorHealthWithExtendedColors = {
-              name = "Sélection de couleur",
+              name = "Emphase de sélection en couleurs",
               type = "toggle",
               order= 8,
               set = function(info, value)
                 AddOn.db.profile.colorHealthWithExtendedColors = value
+                AddOn:Update(AddOn.UpdateHealthColor)
               end,
               get = function(info)
                 return AddOn.db.profile.colorHealthWithExtendedColors
@@ -629,7 +631,7 @@ function AddOn:CreateAndUpdateHeaderGroup(group)
 
   --local isDamager = ElvDB and ElvDB.profileKeys and ElvDB.profileKeys[ElvUI[1].mynameRealm] == "Meivyn"
 
-  local header = AddOn.headers[group]
+  local header = self.headers[group]
 
   if not header then
     --local resetHeader = self:SpawnHeader("RaidFrames", nil, "raid,party",
@@ -662,13 +664,9 @@ function AddOn:CreateAndUpdateHeaderGroup(group)
     --)
     --header:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
 
-    if group == "party" and not self.db.profile.displayPartyGroup then
-      return
-    end
-
     header = oUF:SpawnHeader("oUF_" .. gsub(group, "(.)", strupper, 1), nil, nil,
-    'oUF-initialConfigFunction', format('self:SetWidth(%d); self:SetHeight(%d);', GetUnitFrameWidth(group), GetUnitFrameHeight(group)),
-    'showParty', true, 'showRaid', group ~= "party", 'showSolo', true)
+            "oUF-initialConfigFunction", format("self:SetWidth(%d); self:SetHeight(%d);", GetUnitFrameWidth(group), GetUnitFrameHeight(group)),
+            "showParty", true, "showRaid", group ~= "party", "showSolo", true)
 
     self.headers[group] = header
   end
@@ -704,18 +702,18 @@ function AddOn:CreateAndUpdateHeaderGroup(group)
   end
 
   --if enable then
-    if not header.isForced then
-      header:SetAttribute("maxColumns", maxColumns)
-      header:SetAttribute("unitsPerColumn", unitsPerColumn)
-      header:SetAttribute("showPlayer", true)
-      RegisterStateDriver(header, "visibility", visibility)
-    end
-  --else
-  --  UnregisterStateDriver(header, "visibility")
-  --  header:Hide()
-  --end
+  if not header.isForced then
+    header:SetAttribute("maxColumns", maxColumns)
+    header:SetAttribute("unitsPerColumn", unitsPerColumn)
+    header:SetAttribute("showPlayer", true)
+    RegisterStateDriver(header, "visibility", visibility)
+  end
+  if group == "party" and not self.db.profile.displayPartyGroup then
+    UnregisterStateDriver(header, "visibility")
+    header:Hide()
+  end
 
-  header:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", AddOn.db.profile.offsetX, AddOn.db.profile.offsetY)
+  header:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", self.db.profile.offsetX, self.db.profile.offsetY)
 end
 
 function AddOn:Refresh()
@@ -1219,7 +1217,7 @@ function AddOn:UpdateAll(frame)
     self:UpdateCenterStatusIcon(frame)
   end
 
-  if frame.optionTable.showOverAbsorb then
+  if frame.optionTable and frame.optionTable.showOverAbsorb then
     -- DerangementShieldMeters
     if not frame.totalAbsorb or frame.totalAbsorb:IsForbidden() then return end
     if not frame.totalAbsorbOverlay or frame.totalAbsorbOverlay:IsForbidden() then return end
@@ -1238,11 +1236,25 @@ function AddOn:UpdateAll(frame)
   end
 end
 
+function AddOn:Update(func)
+  for _, header in pairs(AddOn.headers) do
+    for i = 1, #header do
+      local frame = header[i]
+      func(self, frame)
+    end
+  end
+end
+
 function AddOn:UpdatePowerBarVisibility(frame)
   local width, height = frame:GetSize()
   local role = UnitGroupRolesAssigned(frame.unit)
   local _, class = UnitClass(frame.unit)
-  local displayPowerBar = self.db.profile.displayPowerBar and role == "HEALER" or self.db.profile.displayPowerBar and class == "DEATHKNIGHT" and role == "TANK"
+  local displayPowerBar
+  if frame.optionTable.displayPowerBar and frame.optionTable.showHealerManaOnly then
+    displayPowerBar = role == "HEALER" or class == "DEATHKNIGHT" and role == "TANK"
+  else
+    displayPowerBar = frame.optionTable.displayPowerBar
+  end
   local powerBarHeight = 8
   local powerBarUsedHeight = displayPowerBar and powerBarHeight or 0
 
@@ -1356,14 +1368,12 @@ function AddOn:UpdateHealthColor(frame)
   end
   if r ~= frame.healthBar.r or g ~= frame.healthBar.g or b ~= frame.healthBar.b then
     frame.healthBar:SetStatusBarColor(r, g, b)
-
-    if frame.optionTable.colorHealthWithExtendedColors then
-      frame.selectionHighlight:SetVertexColor(r, g, b)
-    else
-      frame.selectionHighlight:SetVertexColor(1, 1, 1)
-    end
-
     frame.healthBar.r, frame.healthBar.g, frame.healthBar.b = r, g, b
+  end
+  if frame.optionTable.colorHealthWithExtendedColors then
+    frame.selectionHighlight:SetVertexColor(r, g, b)
+  else
+    frame.selectionHighlight:SetVertexColor(1, 1, 1)
   end
 end
 
@@ -1511,6 +1521,7 @@ end
 
 function AddOn:UpdateAggroHighlight(frame)
   if not frame.optionTable.displayAggroHighlight then
+    frame.aggroHighlight:Hide();
     return
   end
 
@@ -2320,9 +2331,6 @@ local texCoords = {
   ["Raid-TargetFrame"] = { 0.00781250, 0.55468750, 0.28906250, 0.55468750 },
 }
 
-local NATIVE_UNIT_FRAME_HEIGHT = 36
-local NATIVE_UNIT_FRAME_WIDTH = 72
-
 function AddOn.DefaultSetup(frame, groupType)
   local width = GetUnitFrameWidth(groupType or GetNumGroupMembers())
   local height = GetUnitFrameHeight(groupType or GetNumGroupMembers())
@@ -2330,7 +2338,7 @@ function AddOn.DefaultSetup(frame, groupType)
 
   frame:SetAlpha(1)
 
-  NoCombatFunction(frame, frame.SetSize, { width, height }, true)
+  NoCombatFunction(frame, frame.SetSize, { width, height })
   local powerBarHeight = 8
   local powerBarUsedHeight = AddOn.db.profile.displayPowerBar and powerBarHeight or 0
 
