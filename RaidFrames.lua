@@ -1,7 +1,10 @@
 local ADDON_NAME, ns = ...
 local oUF = ns.oUF
 
-local AddOn = LibStub("AceAddon-3.0"):NewAddon(ADDON_NAME)
+local NATIVE_UNIT_FRAME_HEIGHT = 36
+local NATIVE_UNIT_FRAME_WIDTH = 72
+
+local AddOn = LibStub("AceAddon-3.0"):NewAddon(ADDON_NAME, "AceConsole-3.0")
 AddOn.defaults = {
   profile = {
     useClassColors = true,
@@ -37,8 +40,8 @@ AddOn.defaults = {
     displayBorder = false,
     offsetX = 0,
     offsetY = 0,
-    height = 180,
-    width = 360,
+    height = NATIVE_UNIT_FRAME_HEIGHT * 5,
+    width = NATIVE_UNIT_FRAME_WIDTH * 5,
 
     colorHealthWithExtendedColors = true,
     smoothUpdates = true,
@@ -63,20 +66,16 @@ ns[2] = AddOn.defaults.profile
 
 local AceConfigDialog = LibStub("AceConfigDialog-3.0")
 local AceConfigRegistry = LibStub("AceConfigRegistry-3.0")
-local AceConsole = LibStub("AceConsole-3.0")
 
 RaidFrames = ns
-
-local NATIVE_UNIT_FRAME_HEIGHT = 36
-local NATIVE_UNIT_FRAME_WIDTH = 72
 
 local function debug(...)
   if not ... then return end
   if type(...) == "table" then
-    AceConsole.Print(ADDON_NAME)
+    AddOn:Print()
     DevTools_Dump(...)
   else
-    AceConsole.Print(ADDON_NAME, ...)
+    AddOn:Print(...)
   end
 end
 
@@ -665,8 +664,8 @@ function AddOn:CreateAndUpdateHeaderGroup(group)
     --header:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
 
     header = oUF:SpawnHeader("oUF_" .. gsub(group, "(.)", strupper, 1), nil, nil,
-            "oUF-initialConfigFunction", format("self:SetWidth(%d); self:SetHeight(%d);", GetUnitFrameWidth(group), GetUnitFrameHeight(group)),
-            "showParty", true, "showRaid", group ~= "party", "showSolo", true)
+      "oUF-initialConfigFunction", format("self:SetWidth(%d); self:SetHeight(%d);", GetUnitFrameWidth(group), GetUnitFrameHeight(group)),
+      "showParty", true, "showRaid", true, "showSolo", true)
 
     self.headers[group] = header
   end
@@ -681,18 +680,14 @@ function AddOn:CreateAndUpdateHeaderGroup(group)
     visibility = "[@raid6,exists][nogroup] hide; show"
     header:SetAttribute("point", "LEFT")
     header:SetAttribute("groupingOrder", "TANK,HEALER,DAMAGER,NONE")
-    header:SetAttribute("columnAnchorPoint", "LEFT")
-    header:SetAttribute("point", "LEFT")
   elseif group == "raid20" then
     visibility = "[@raid6,noexists][@raid21,exists] hide; show"
     maxColumns = 4
     unitsPerColumn = 5
-    header:SetAttribute("columnAnchorPoint", "LEFT")
   elseif group == "raid25" then
     visibility = "[@raid21,noexists][@raid26,exists] hide; show"
     maxColumns = 5
     unitsPerColumn = 5
-    header:SetAttribute("columnAnchorPoint", "LEFT")
   elseif group == "raid40" then
     visibility = "[@raid26,noexists] hide; show"
     maxColumns = 8
