@@ -664,7 +664,7 @@ function AddOn:CreateAndUpdateHeaderGroup(group)
     --header:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
 
     header = oUF:SpawnHeader("oUF_" .. gsub(group, "(.)", strupper, 1), nil, nil,
-      "oUF-initialConfigFunction", format("self:SetWidth(%d); self:SetHeight(%d);", GetUnitFrameWidth(group, self:GetName(), GetUnitName(self.unit, true)), GetUnitFrameHeight(group)),
+      "oUF-initialConfigFunction", format("self:SetWidth(%d); self:SetHeight(%d);", GetUnitFrameWidth(group, self:GetName(), self.unit and GetUnitName(self.unit, true) or "nil"), GetUnitFrameHeight(group)),
       "showParty", true, "showRaid", true, "showSolo", true)
 
     self.headers[group] = header
@@ -2326,7 +2326,7 @@ local texCoords = {
 }
 
 function AddOn.DefaultSetup(frame, groupType)
-  local width = GetUnitFrameWidth(groupType or GetNumGroupMembers(), frame:GetName(), GetUnitName(frame.unit, true))
+  local width = GetUnitFrameWidth(groupType or GetNumGroupMembers(), frame:GetName(), frame.unit and GetUnitName(frame.unit, true) or "nil")
   local height = GetUnitFrameHeight(groupType or GetNumGroupMembers())
   local componentScale = min(height / NATIVE_UNIT_FRAME_HEIGHT, width / NATIVE_UNIT_FRAME_WIDTH)
 
