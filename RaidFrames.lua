@@ -106,14 +106,14 @@ local function NoCombatFunction(self, func, args, debugMode)
   end
 end
 
-local function GetUnitFrameWidth(groupSizeOrType)
+local function GetUnitFrameWidth(groupSizeOrType, name, playerName)
   local width
   if type(groupSizeOrType) == "number" then
     width = math.floor(AddOn.db.profile.width / ((groupSizeOrType <= 5 or groupSizeOrType > 20) and 5 or 4) + 0.5)
   else
     width = math.floor(AddOn.db.profile.width / (groupSizeOrType == "raid20" and 4 or 5) + 0.5)
   end
-  --debug(width, groupSizeOrType)
+  debug("playerName=" .. tostring(playerName), "name=" .. name, "width=" .. width, "groupSizeOrType=" .. groupSizeOrType, "\n" .. debugstack(2, 3, 0))
   return width
 end
 
@@ -664,7 +664,7 @@ function AddOn:CreateAndUpdateHeaderGroup(group)
     --header:SetPoint("TOPLEFT", nil, "BOTTOMLEFT", 757, 258)
 
     header = oUF:SpawnHeader("oUF_" .. gsub(group, "(.)", strupper, 1), nil, nil,
-      "oUF-initialConfigFunction", format("self:SetWidth(%d); self:SetHeight(%d);", GetUnitFrameWidth(group), GetUnitFrameHeight(group)),
+      "oUF-initialConfigFunction", format("self:SetWidth(%d); self:SetHeight(%d);", GetUnitFrameWidth(group, self:GetName(), GetUnitName(self.unit, true)), GetUnitFrameHeight(group)),
       "showParty", true, "showRaid", true, "showSolo", true)
 
     self.headers[group] = header
@@ -696,7 +696,6 @@ function AddOn:CreateAndUpdateHeaderGroup(group)
     header:SetAttribute("columnAnchorPoint", "TOP")
   end
 
-  --if enable then
   if not header.isForced then
     header:SetAttribute("maxColumns", maxColumns)
     header:SetAttribute("unitsPerColumn", unitsPerColumn)
@@ -2327,7 +2326,7 @@ local texCoords = {
 }
 
 function AddOn.DefaultSetup(frame, groupType)
-  local width = GetUnitFrameWidth(groupType or GetNumGroupMembers())
+  local width = GetUnitFrameWidth(groupType or GetNumGroupMembers(), frame:GetName(), GetUnitName(frame.unit, true))
   local height = GetUnitFrameHeight(groupType or GetNumGroupMembers())
   local componentScale = min(height / NATIVE_UNIT_FRAME_HEIGHT, width / NATIVE_UNIT_FRAME_WIDTH)
 
